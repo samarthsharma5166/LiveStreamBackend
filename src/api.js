@@ -179,11 +179,11 @@ app.delete('/api/videos/:filename', requireAuth, (req, res) => {
 // Serve videos statically for preview (protected by query token)
 app.use('/videos', requireAuth, express.static(VIDEO_DIR));
 
-// Serve frontend in production
-const frontendBuildPath = path.join(__dirname, '..', 'frontend', 'dist');
-app.use(express.static(frontendBuildPath));
-app.use((req, res) => {
-    res.sendFile(path.join(frontendBuildPath, 'index.html'));
-});
+// Serve frontend in production (Commented out because backend is hosted separately)
+// const frontendBuildPath = path.join(__dirname, '..', 'frontend', 'dist');
+// app.use(express.static(frontendBuildPath));
+// app.use((req, res) => {
+//     res.sendFile(path.join(frontendBuildPath, 'index.html'));
+// });
 
 module.exports = app;
