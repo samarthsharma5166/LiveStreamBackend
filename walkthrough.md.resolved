@@ -1,0 +1,67 @@
+# Independent Automated YouTube Live Streaming Setup Complete
+
+I have built the backend service in your `Live Streaming` folder as a completely standalone broadcasting service (similar to OneStream).
+
+## What Was Implemented
+
+1. **Independent Schedule Config ([schedule.json](file:///Users/samarthsharma/Documents/Live%20Streaming/schedule.json))**: You now control the schedule directly in this folder. You define the exact video file, the time, and the class title. 
+2. **YogSaathi API Integrator**: Whenever a video is scheduled to stream, this app will automatically send a POST request to your main YogSaathi backend (`/api/yogaClasses`) using an Admin token to create the class.
+3. **YouTube Broadcaster Engine**: Interfaces with the YouTube API to generate a unique Live Broadcast for every scheduled session.
+4. **Schedule Engine**: A cron job manager that dynamically triggers based on the times you define in [schedule.json](file:///Users/samarthsharma/Documents/Live%20Streaming/schedule.json).
+
+## Required Setup Steps
+
+Before you can turn this on, you need to configure the connection to both YouTube and YogSaathi.
+
+### Step 1: Prepare [.env](file:///Users/samarthsharma/Documents/YogSaathi/yoga-backend/.env) file
+1. Open [/Users/samarthsharma/Documents/Live Streaming/.env.example](file:///Users/samarthsharma/Documents/Live%20Streaming/.env.example) and rename it to [.env](file:///Users/samarthsharma/Documents/YogSaathi/yoga-backend/.env).
+2. Ensure you paste your `ADMIN_JWT_TOKEN` (the bearer token you use to login to YogSaathi as an admin) into this [.env](file:///Users/samarthsharma/Documents/YogSaathi/yoga-backend/.env). This allows the streamer to generate classes.
+3. Make sure `YOGSAATHI_API_URL` points to your active backend (e.g., `https://yogsaathi.com/api`).
+
+### Step 2: Set up YouTube Data API
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/).
+2. Create a Project and enable **YouTube Data API v3**.
+3. Go to **APIs & Services -> OAuth consent screen** and set it up as External, adding your YouTube channel email as a Test User.
+4. Go to **Credentials -> Create Credentials -> OAuth Client ID -> Web application**.
+5. Give it a name and under **Authorized redirect URIs**, add `http://localhost:3000/oauth2callback`. Click **Create**.
+6. Copy the **Client ID** and **Client Secret** into your [.env](file:///Users/samarthsharma/Documents/YogSaathi/yoga-backend/.env) file for `YOUTUBE_CLIENT_ID` and `YOUTUBE_CLIENT_SECRET`.
+
+### Step 3: Authorize Your Channel
+1. In your terminal, navigate to `/Users/samarthsharma/Documents/Live Streaming`
+2. Run `node youtube-auth.js`
+3. A URL will be printed in your terminal. Open it in your browser and authorize the app.
+4. The terminal will then print a `YOUTUBE_REFRESH_TOKEN`. Copy that into your `.env` file and save.
+
+### Step 4: Add Videos & Configure Schedule
+1. Place your pre-recorded `.mp4` video files into the `/Users/samarthsharma/Documents/Live Streaming/videos` folder.
+2. Edit `/Users/samarthsharma/Documents/Live Streaming/schedule.json`. This is where you map **times** to **video files**. Example:
+   ```json
+   {
+     "time": "06:00",
+     "video": "morning_flow.mp4",
+     "title": "Morning Vinyasa Yoga",
+     "focusArea": "Flexibility & Energy",
+     "isActive": true
+   }
+   ```
+   *Only items with `"isActive": true` will actually run.*
+
+### Step 5: Start the Scheduler via Docker
+
+We've containerized the app using a stable Ubuntu image with native FFmpeg, ensuring it works reliably across any server. Start it in the background using Docker Compose:
+
+```bash
+cd "/Users/samarthsharma/Documents/Live Streaming"
+docker compose up -d
+```
+
+To view logs and see if streams are starting successfully:
+```bash
+docker compose logs -f
+```
+
+## How It Works in Production
+1. At 06:00, the Docker container looks at `schedule.json` and sees `morning_flow.mp4`.
+2. It automatically creates a YouTube Live broadcast and gets a unique Stream Key.
+3. It makes an API Call to `POST /api/yogaClasses` on your main YogSaathi backend, telling it "I am streaming Morning Vinyasa Yoga right now at this YouTube Link."
+4. It launches the system `ffmpeg` inside the container to push your `.mp4` video file directly to YouTube's ingest server, injecting a silent audio track if your video doesn't have one (a strict YouTube requirement).

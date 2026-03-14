@@ -1,0 +1,20 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model StreamSchedule {
+  id            Int      @id @default(autoincrement())
+  date          String   @default("") // e.g., "2026-03-14"
+  time          String   // e.g., "06:00", "09:46"
+  video         String   // e.g., "v1.mp4"
+  title         String   // e.g., "Morning Vinyasa Yoga"
+  focusArea     String   // e.g., "Flexibility & Energy"
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}

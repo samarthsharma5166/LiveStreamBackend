@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  live-streamer:
+    build: .
+    container_name: yogsaathi-streamer
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./videos:/app/videos
+      - ./dev.db:/app/dev.db
