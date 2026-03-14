@@ -3,6 +3,7 @@ const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const fse = require('fs-extra');
 const { PrismaClient } = require('@prisma/client');
 const jwt = require('jsonwebtoken');
 
@@ -11,9 +12,35 @@ const app = express();
 const VIDEO_DIR = process.env.VIDEO_DIRECTORY || path.join(__dirname, '..', 'videos');
 
 // Ensure videos directory exists
+const TEMP_DIR = path.join(VIDEO_DIR, 'temp');
 if (!fs.existsSync(VIDEO_DIR)) {
     fs.mkdirSync(VIDEO_DIR, { recursive: true });
 }
+if (!fs.existsSync(TEMP_DIR)) {
+    fs.mkdirSync(TEMP_DIR, { recursive: true });
+}
+
+// Clean up stale temp directories older than 2 hours to save space
+const cleanupStaleUploads = () => {
+    try {
+        if (!fs.existsSync(TEMP_DIR)) return;
+        const now = Date.now();
+        const dirs = fs.readdirSync(TEMP_DIR);
+        for (const dir of dirs) {
+            const dirPath = path.join(TEMP_DIR, dir);
+            const stat = fs.statSync(dirPath);
+            // If directory is older than 2 hours (2 * 60 * 60 * 1000)
+            if (now - stat.mtimeMs > 7200000) {
+                fse.removeSync(dirPath);
+                console.log(`Cleaned up stale upload directory: ${dir}`);
+            }
+        }
+    } catch (err) {
+        console.error('Error cleaning up stale uploads:', err);
+    }
+};
+setInterval(cleanupStaleUploads, 3600000); // Run every hour
+
 
 // Set up multer for video uploads
 const storage = multer.diskStorage({
@@ -28,7 +55,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-app.use(cors("*"));
+app.use(cors({ origin: '*', methods: ['GET', 'POST', 'PUT', 'DELETE'] }));
 app.use(express.json());
 
 // --- Authentication --- //
@@ -148,15 +175,106 @@ app.get('/api/videos', requireAuth, (req, res) => {
     }
 });
 
-// API: Upload a new video
-app.post('/api/upload', requireAuth, upload.single('video'), (req, res) => {
+// API: Upload a video chunk
+app.post('/api/upload/chunk', requireAuth, upload.single('video'), (req, res) => {
     if (!req.file) {
-        return res.status(400).json({ error: 'No video file provided' });
+        return res.status(400).json({ error: 'No video chunk provided' });
     }
-    res.status(201).json({
-        message: 'Video uploaded successfully',
-        filename: req.file.filename
-    });
+    const { uploadId, chunkIndex } = req.body;
+    if (!uploadId || chunkIndex === undefined) {
+         // Cleanup immediately if invalid request
+         fs.unlinkSync(req.file.path);
+         return res.status(400).json({ error: 'Missing uploadId or chunkIndex' });
+    }
+
+    try {
+        const chunkDir = path.join(TEMP_DIR, uploadId);
+        if (!fs.existsSync(chunkDir)) {
+            fs.mkdirSync(chunkDir, { recursive: true });
+        }
+        
+        // Move the uploaded chunk to the specific folder with its index as the filename
+        const chunkPath = path.join(chunkDir, chunkIndex.toString());
+        fs.renameSync(req.file.path, chunkPath);
+        
+        res.status(200).json({ message: `Chunk ${chunkIndex} uploaded successfully` });
+    } catch (error) {
+        console.error('Error saving chunk:', error);
+        // Attempt cleanup 
+        if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+        res.status(500).json({ error: 'Failed to save chunk' });
+    }
+});
+
+// API: Complete chunked upload
+app.post('/api/upload/complete', requireAuth, async (req, res) => {
+    const { uploadId, originalFilename, totalChunks } = req.body;
+    
+    if (!uploadId || !originalFilename || !totalChunks) {
+        return res.status(400).json({ error: 'Missing required parameters' });
+    }
+
+    const chunkDir = path.join(TEMP_DIR, uploadId);
+    
+    try {
+        if (!fs.existsSync(chunkDir)) {
+            return res.status(404).json({ error: 'Upload session not found' });
+        }
+
+        // Verify all chunks exist
+        for (let i = 0; i < totalChunks; i++) {
+            if (!fs.existsSync(path.join(chunkDir, i.toString()))) {
+                 return res.status(400).json({ error: `Missing chunk ${i}` });
+            }
+        }
+
+        // Create the final file
+        const safeFilename = Date.now() + '-' + originalFilename.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const finalPath = path.join(VIDEO_DIR, safeFilename);
+        
+        // Ensure final file is empty/created
+        fs.writeFileSync(finalPath, '');
+
+        // Append chunks in order
+        for (let i = 0; i < totalChunks; i++) {
+            const chunkPath = path.join(chunkDir, i.toString());
+            const chunkData = fs.readFileSync(chunkPath);
+            fs.appendFileSync(finalPath, chunkData);
+        }
+
+        // Cleanup temp directory
+        fse.removeSync(chunkDir);
+
+        res.status(201).json({
+            message: 'Video upload completed successfully',
+            filename: safeFilename
+        });
+
+    } catch (error) {
+        console.error('Error completing upload:', error);
+        // Attempt cleanup
+        try {
+             fse.removeSync(chunkDir);
+        } catch(e) {}
+        res.status(500).json({ error: 'Failed to stitch video' });
+    }
+});
+
+// API: Abort an upload and clean up parts
+app.post('/api/upload/abort', requireAuth, (req, res) => {
+     const { uploadId } = req.body;
+     if (!uploadId) return res.status(400).json({ error: 'Missing uploadId' });
+     
+     const chunkDir = path.join(TEMP_DIR, uploadId);
+     try {
+         if (fs.existsSync(chunkDir)) {
+             fse.removeSync(chunkDir);
+         }
+         res.status(200).json({ message: 'Upload aborted and cleaned up' });
+     } catch(e) {
+         console.error('Error aborting upload:', e);
+         res.status(500).json({ error: 'Failed to cleanup upload' });
+     }
 });
 
 // API: Delete a video
