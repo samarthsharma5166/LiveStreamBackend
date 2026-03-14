@@ -35,6 +35,10 @@ app.use(express.json());
 const APP_PASSWORD = process.env.APP_PASSWORD || 'default_password';
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-streamer-key';
 
+app.get('/api/health', (req, res) => {
+    res.json({ message: 'OK' });
+});
+
 // Login Endpoint
 app.post('/api/login', (req, res) => {
     const { password } = req.body;

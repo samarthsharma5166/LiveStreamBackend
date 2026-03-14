@@ -1,0 +1,33 @@
+name: Deploy Node.js Application to Hostinger
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Hostinger
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          PRODUCTION_ENV: ${{ secrets.PRODUCTION_ENV }}
+        with:
+          host: ${{ secrets.HOSTINGER_HOST }}
+          username: ${{ secrets.HOSTINGER_USERNAME }}
+          key: ${{ secrets.HOSTINGER_SSH_KEY }}
+          envs: PRODUCTION_ENV
+          script: |
+            cd /root/LiveStreamBackend
+            git pull origin main
+            
+            # Securely write the environment variables to the .env file
+            echo "$PRODUCTION_ENV" > .env
+            
+            # Rebuild and start the containers
+            docker compose up -d --build
