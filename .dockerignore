@@ -1,0 +1,5 @@
+videos
+node_modules
+.git
+dev.db
+*.mp4
