@@ -63,6 +63,10 @@ function startStreaming(videoPath, rtmpUrl, streamKey = '') {
 
         console.log(`Video has audio stream: ${hasAudio}`);
 
+        const streamHeight = process.env.STREAM_HEIGHT || '1080';
+        const streamBitrate = process.env.STREAM_BITRATE || '4500k';
+        const streamBufsize = process.env.STREAM_BUFSIZE || '9000k';
+
         let ffmpegArgs = [];
 
         if (hasAudio) {
@@ -70,19 +74,21 @@ function startStreaming(videoPath, rtmpUrl, streamKey = '') {
             ffmpegArgs = [
                 '-re',
                 '-i', videoPath,
-                '-vf', 'scale=-2:1440',  // Force 1440p (2K) height, auto-calculate width preserving aspect ratio
-                '-r', '30',              // Force 30fps to keep bandwidth stable
+                '-vf', `scale=-2:${streamHeight}`, // Full HD 1080p (stable across all server types)
+                '-r', '30',                         // 30fps
                 '-c:v', 'libx264',
                 '-preset', 'ultrafast',
                 '-threads', '0',
-                '-maxrate', '9000k',     // 9 Mbps required for 1440p
-                '-bufsize', '18000k',    // 2x maxrate size for smoother streaming
+                '-maxrate', streamBitrate,          // Stable 4.5 Mbps (YouTube recommended for 1080p)
+                '-bufsize', streamBufsize,
                 '-pix_fmt', 'yuv420p',
                 '-g', '60',
                 '-c:a', 'aac',
                 '-b:a', '128k',
                 '-ar', '44100',
                 '-ac', '2',
+                '-max_muxing_queue_size', '1024',
+                '-flvflags', 'no_duration_filesize',
                 '-f', 'flv',
                 fullDestination
             ];
@@ -93,13 +99,13 @@ function startStreaming(videoPath, rtmpUrl, streamKey = '') {
                 '-i', videoPath,
                 '-f', 'lavfi',
                 '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100',
-                '-vf', 'scale=-2:1440',
+                '-vf', `scale=-2:${streamHeight}`,
                 '-r', '30',
                 '-c:v', 'libx264',
                 '-preset', 'ultrafast',
                 '-threads', '0',
-                '-maxrate', '9000k',
-                '-bufsize', '18000k',
+                '-maxrate', streamBitrate,
+                '-bufsize', streamBufsize,
                 '-pix_fmt', 'yuv420p',
                 '-g', '60',
                 '-c:a', 'aac',
@@ -109,6 +115,8 @@ function startStreaming(videoPath, rtmpUrl, streamKey = '') {
                 '-map', '0:v:0',
                 '-map', '1:a:0',
                 '-shortest',
+                '-max_muxing_queue_size', '1024',
+                '-flvflags', 'no_duration_filesize',
                 '-f', 'flv',
                 fullDestination
             ];

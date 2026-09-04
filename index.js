@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const cron = require('node-cron');
-const { createLiveStream } = require('./src/youtube');
+const { createLiveStream, endLiveStream } = require('./src/youtube');
 const { startStreaming } = require('./src/stream-manager');
 const { createYogSaathiClass } = require('./src/yogsaathi-api');
 require('dotenv').config();
@@ -73,9 +73,14 @@ async function handleScheduledStream(timeSlotStr, scheduledItem) {
 
         console.log(`📤 Pushing ${scheduledItem.video} to YouTube Ingest...`);
         // We pass streamData.streamKey specifically to the manager
-        await startStreaming(videoPath, streamData.streamUrl, streamData.streamKey);
-
-        console.log(`✅ Stream finished successfully for slot ${timeSlotStr}`);
+        try {
+            await startStreaming(videoPath, streamData.streamUrl, streamData.streamKey);
+            console.log(`✅ Stream finished successfully for slot ${timeSlotStr}`);
+        } finally {
+            if (streamData?.videoId) {
+                await endLiveStream(streamData.videoId);
+            }
+        }
     } catch (error) {
         console.error(`❌ Failed to handle stream for slot ${timeSlotStr}:`, error.message);
     }

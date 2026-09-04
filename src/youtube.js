@@ -45,7 +45,7 @@ async function createLiveStream(title, description, scheduledStartTime = null) {
                 },
                 contentDetails: {
                     enableAutoStart: true,
-                    enableAutoStop: true,
+                    enableAutoStop: false, // Prevent YouTube from killing stream during momentary packet/buffer drops
                     recordFromStart: true,
                     monitorStream: {
                         enableMonitorStream: false
@@ -64,9 +64,9 @@ async function createLiveStream(title, description, scheduledStartTime = null) {
                     title: `Stream for ${title}`
                 },
                 cdn: {
-                    frameRate: '30fps',
+                    frameRate: 'variable',
                     ingestionType: 'rtmp',
-                    resolution: '720p'
+                    resolution: 'variable'
                 }
             }
         });
@@ -93,6 +93,27 @@ async function createLiveStream(title, description, scheduledStartTime = null) {
     }
 }
 
+/**
+ * Transitions a broadcast to complete status on YouTube.
+ * @param {string} broadcastId The broadcast ID
+ */
+async function endLiveStream(broadcastId) {
+    if (!broadcastId) return;
+    try {
+        console.log(`⏹️ Transitioning YouTube Broadcast ${broadcastId} to COMPLETE...`);
+        const response = await youtube.liveBroadcasts.transition({
+            part: 'id,status',
+            id: broadcastId,
+            broadcastStatus: 'complete'
+        });
+        console.log(`✅ Broadcast ${broadcastId} successfully ended on YouTube.`);
+        return response.data;
+    } catch (error) {
+        console.error(`⚠️ Could not transition broadcast ${broadcastId} to complete:`, error?.response?.data || error.message);
+    }
+}
+
 module.exports = {
-    createLiveStream
+    createLiveStream,
+    endLiveStream
 };
