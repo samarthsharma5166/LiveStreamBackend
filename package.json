@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "npx prisma db push && node index.js",
+    "dev": "npx prisma db push && node --watch index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

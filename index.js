@@ -41,7 +41,9 @@ async function handleScheduledStream(timeSlotStr, scheduledItem) {
 
         // 1. Create the YouTube live broadcast
         const videoTitle = `YogSaathi Live: ${scheduledItem.title || 'Yoga Class'}`;
-        const videoDesc = `Join our live yoga class focusing on ${scheduledItem.focusArea || 'wellness'}.`;
+        const videoDesc = (scheduledItem.description && scheduledItem.description.trim().length > 0)
+            ? scheduledItem.description.trim()
+            : `Join our live yoga class focusing on ${scheduledItem.focusArea || 'wellness'}.`;
 
         // 2. Notify YogSaathi Backend and YouTube to create the scheduled class accurately
         // Construct the Date object from "YYYY-MM-DD" and "HH:MM"

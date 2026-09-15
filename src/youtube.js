@@ -30,13 +30,16 @@ async function createLiveStream(title, description, scheduledStartTime = null) {
             scheduledStartTime.setMinutes(scheduledStartTime.getMinutes() + 1); // Start slightly in future
         }
 
+        const safeTitle = (title || 'Yoga Class').slice(0, 100);
+        const safeDescription = (description || '').slice(0, 5000);
+
         // 1. Create the broadcast
         const broadcastResponse = await youtube.liveBroadcasts.insert({
             part: 'snippet,status,contentDetails',
             requestBody: {
                 snippet: {
-                    title: title,
-                    description: description,
+                    title: safeTitle,
+                    description: safeDescription,
                     scheduledStartTime: scheduledStartTime.toISOString(),
                 },
                 status: {
@@ -61,7 +64,7 @@ async function createLiveStream(title, description, scheduledStartTime = null) {
             part: 'snippet,cdn',
             requestBody: {
                 snippet: {
-                    title: `Stream for ${title}`
+                    title: `Stream: ${safeTitle}`.slice(0, 100)
                 },
                 cdn: {
                     frameRate: 'variable',

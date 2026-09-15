@@ -111,14 +111,84 @@ app.get('/api/schedule', requireAuth, async (req, res) => {
     }
 });
 
-// API: Create a new schedule
+// API: Create new schedule(s) - Supports single time, array of times, or batch array
 app.post('/api/schedule', requireAuth, async (req, res) => {
-    const { date, time, video, title, focusArea, isActive } = req.body;
     try {
+        // 1. Batch array of schedule objects
+        if (Array.isArray(req.body)) {
+            const created = await prisma.streamSchedule.createMany({
+                data: req.body.map(item => ({
+                    date: item.date,
+                    time: item.time,
+                    video: item.video,
+                    title: item.title,
+                    focusArea: item.focusArea,
+                    description: item.description || '',
+                    isActive: item.isActive ?? true
+                }))
+            });
+            return res.status(201).json({ message: `Created ${created.count} schedules`, count: created.count });
+        }
+
+        const { date, time, times, video, title, focusArea, description, isActive } = req.body;
+
+        // 2. Parse times: support array of times, comma-separated string, or single time
+        let timeList = [];
+        if (Array.isArray(times) && times.length > 0) {
+            timeList = times.filter(t => typeof t === 'string' && t.trim().length > 0);
+        } else if (Array.isArray(time) && time.length > 0) {
+            timeList = time.filter(t => typeof t === 'string' && t.trim().length > 0);
+        } else if (typeof time === 'string' && time.includes(',')) {
+            timeList = time.split(',').map(t => t.trim()).filter(t => t.length > 0);
+        } else if (time) {
+            timeList = [time.trim()];
+        }
+
+        if (timeList.length === 0) {
+            return res.status(400).json({ error: 'Please provide at least one valid time slot' });
+        }
+
+        // 3. Multi-slot creation
+        if (timeList.length > 1) {
+            const dataToCreate = timeList.map(t => ({
+                date,
+                time: t,
+                video,
+                title,
+                focusArea,
+                description: description || '',
+                isActive: isActive ?? true
+            }));
+
+            await prisma.streamSchedule.createMany({
+                data: dataToCreate
+            });
+
+            const createdRecords = await prisma.streamSchedule.findMany({
+                where: {
+                    date,
+                    video,
+                    time: { in: timeList }
+                },
+                orderBy: { time: 'asc' }
+            });
+
+            return res.status(201).json(createdRecords);
+        }
+
+        // 4. Single slot creation
         const newSchedule = await prisma.streamSchedule.create({
-            data: { date, time, video, title, focusArea, isActive: isActive ?? true }
+            data: { 
+                date, 
+                time: timeList[0], 
+                video, 
+                title, 
+                focusArea, 
+                description: description || '', 
+                isActive: isActive ?? true 
+            }
         });
-        res.status(201).json(newSchedule);
+        return res.status(201).json(newSchedule);
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Failed to create schedule' });
@@ -128,11 +198,15 @@ app.post('/api/schedule', requireAuth, async (req, res) => {
 // API: Update an existing schedule
 app.put('/api/schedule/:id', requireAuth, async (req, res) => {
     const { id } = req.params;
-    const { date, time, video, title, focusArea, isActive } = req.body;
+    const { date, time, video, title, focusArea, description, isActive } = req.body;
     try {
+        const updateData = { date, time, video, title, focusArea, isActive };
+        if (description !== undefined) {
+            updateData.description = description;
+        }
         const updated = await prisma.streamSchedule.update({
             where: { id: Number(id) },
-            data: { date, time, video, title, focusArea, isActive }
+            data: updateData
         });
         res.json(updated);
     } catch (error) {
