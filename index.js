@@ -78,10 +78,13 @@ async function handleScheduledStream(timeSlotStr, scheduledItem) {
         try {
             await startStreaming(videoPath, streamData.streamUrl, streamData.streamKey);
             console.log(`✅ Stream finished successfully for slot ${timeSlotStr}`);
-        } finally {
+            // Only end broadcast when stream REALLY finished successfully
             if (streamData?.videoId) {
                 await endLiveStream(streamData.videoId);
             }
+        } catch (streamErr) {
+            console.error(`❌ Streaming interrupted or failed for slot ${timeSlotStr}:`, streamErr.message);
+            // DO NOT force-kill the broadcast on YouTube if an error happened
         }
     } catch (error) {
         console.error(`❌ Failed to handle stream for slot ${timeSlotStr}:`, error.message);
